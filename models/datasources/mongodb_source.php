@@ -792,6 +792,7 @@ class MongodbSource extends DboSource {
  * @access public
  */
 	public function read(&$Model, $query = array()) {
+		
 		if (!$this->isConnected()) {
 			return false;
 		}
@@ -909,6 +910,104 @@ class MongodbSource extends DboSource {
 				}
 				$_return[][$Model->alias] = $mongodata;
 			}
+			
+			// gestion des relations
+			if ($Model->recursive > -1) {
+				foreach ($Model->__associations as $type) {
+					foreach ($Model->{$type} as $assoc => $assocData) {
+						$linkModel =& $Model->{$assoc};
+						$linkModel->recursive = -1;
+						//debug($linkModel);
+						
+						$db =& ConnectionManager::getDataSource($linkModel->useDbConfig);
+	
+						/*
+						if (empty($linkedModels[$type . '/' . $assoc])) {
+							if ($model->useDbConfig == $linkModel->useDbConfig) {
+								$db =& $this;
+							} else {
+								$db =& ConnectionManager::getDataSource($linkModel->useDbConfig);
+							}
+						} elseif ($model->recursive > 1 && ($type == 'belongsTo' || $type == 'hasOne')) {
+							$db =& $this;
+						}//*/
+	
+						switch($type) {
+							case 'hasMany':
+								
+								$ids = Set::classicExtract($_return, '{n}.'.$Model->alias.'._id');
+								$subResult = $linkModel->find('all', array('conditions' => array($assocData['foreignKey'] => array('$in' => $ids))));
+								$subResult = Set::combine($subResult, '{n}.'.$linkModel->alias.'._id', '{n}', '{n}.'.$linkModel->alias.'.'.$assocData['foreignKey']);
+								foreach ($_return as &$element) {
+									if(!empty($subResult[$element[$Model->alias]['_id']])) {
+										//rewrite subelement to change main class
+										$subElements = $subResult[$element[$Model->alias]['_id']];
+										foreach($subElements as &$subElement) {
+											$subElement[$assocData['className']] = $subElement[$assoc];
+											unset($subElement[$assoc]);
+										}
+										
+										$element[$assoc] = $subElements;
+									} else {
+										$element[$assoc] = array();
+									}
+								}
+								break;
+							case 'belongsTo':
+								$ids = Set::classicExtract($_return, '{n}.'.$Model->alias.'.'.$assocData['foreignKey']);
+								$subResult = $linkModel->find('all', array('conditions' => array($assocData['foreignKey'] => array('$in' => $ids))));
+								$subResult = Set::combine($subResult, '{n}.'.$linkModel->alias.'._id', '{n}');
+								foreach ($_return as &$element) {
+									if(
+										!empty($element[$Model->alias][$assocData['foreignKey']]) AND
+										!empty($subResult[$element[$Model->alias][$assocData['foreignKey']]])
+									) {
+										$element[$assoc] = $subResult[$element[$Model->alias][$assocData['foreignKey']]][$assoc];
+									} else {
+										$element[$assoc] = array();
+									}
+								}
+								break;
+							case 'hasOne':
+								$ids = Set::classicExtract($_return, '{n}.'.$Model->alias.'._id');
+								$subResult = $linkModel->find('all', array('conditions' => array($assocData['foreignKey'] => array('$in' => $ids))));
+								$subResult = Set::combine($subResult, '{n}.'.$linkModel->alias.'.'.$assocData['foreignKey'], '{n}');
+								debug($subResult);
+								foreach ($_return as &$element) {
+									if(
+										!empty($subResult[$element[$Model->alias]['_id']])
+									) {
+										$element[$assoc] = $subResult[$element[$Model->alias]['_id']][$assoc];
+									} else {
+										$element[$assoc] = array();
+									}
+								}
+								
+								break;
+								
+						}
+						
+						if (isset($db) && method_exists($db, 'queryAssociation')) {
+							$stack = array($assoc);
+							
+
+							//$db->queryAssociation($Model, $linkModel, $type, $assoc, $assocData, $array, true, $_return, $Model->recursive - 1, $stack);
+							//unset($db);
+	
+							if ($type === 'hasMany') {
+								$filtered []= $assoc;
+							}
+						}
+					}
+				}
+				if(!isset($filtered)) {
+					$filtered = array();
+				}
+				$this->__filterResults($_return, $Model, $filtered);
+			}
+			
+			
+			
 			return $_return;
 		}
 		return $return;
