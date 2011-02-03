@@ -108,6 +108,8 @@ class MongodbSource extends DboSource {
 		'timestamp' => array('name' => 'timestamp', 'format' => null, 'formatter' => 'MongodbDateFormatter'),
 		'time' => array('name' => 'time', 'format' => null, 'formatter' => 'MongodbDateFormatter'),
 		'date' => array('name' => 'date', 'format' => null, 'formatter' => 'MongodbDateFormatter'),
+		'array' => array('name' => 'array', 'format' => null, 'formatter' => 'array'),
+		//??'serialize' => array('name' => 'date', 'format' => null, 'formatter' => 'MongodbDateFormatter'),
 	);
 
 /**
@@ -455,17 +457,22 @@ class MongodbSource extends DboSource {
 		return false;
 	}
 
-/**
- * createSchema method
- *
- * Mongo no care for creating schema. Mongo work with no schema.
- *
- * @param mixed $schema
- * @param mixed $tableName null
- * @return void
- * @access public
- */
+	/**
+	 * Create mongo collection
+	 * 
+	 * @TODO add logQuery call
+	 *
+	 * @param mixed $schema
+	 * @param mixed $tableName null
+	 * @return void
+	 * @access public
+	 */
 	public function createSchema($schema, $tableName = null) {
+		if(!empty($tableName)) {
+			$this->_db->createCollection($tableName);
+		} else {
+			// @TODO create each table from $schema ?
+		}
 		return true;
 	}
 
@@ -917,72 +924,29 @@ class MongodbSource extends DboSource {
 					foreach ($Model->{$type} as $assoc => $assocData) {
 						$linkModel =& $Model->{$assoc};
 						$linkModel->recursive = -1;
-						//debug($linkModel);
 						
 						$db =& ConnectionManager::getDataSource($linkModel->useDbConfig);
 	
-						/*
-						if (empty($linkedModels[$type . '/' . $assoc])) {
-							if ($model->useDbConfig == $linkModel->useDbConfig) {
-								$db =& $this;
-							} else {
-								$db =& ConnectionManager::getDataSource($linkModel->useDbConfig);
-							}
-						} elseif ($model->recursive > 1 && ($type == 'belongsTo' || $type == 'hasOne')) {
-							$db =& $this;
-						}//*/
-	
 						switch($type) {
 							case 'hasMany':
-								
-								$ids = Set::classicExtract($_return, '{n}.'.$Model->alias.'._id');
-								$subResult = $linkModel->find('all', array('conditions' => array($assocData['foreignKey'] => array('$in' => $ids))));
-								$subResult = Set::combine($subResult, '{n}.'.$linkModel->alias.'._id', '{n}', '{n}.'.$linkModel->alias.'.'.$assocData['foreignKey']);
-								foreach ($_return as &$element) {
-									if(!empty($subResult[$element[$Model->alias]['_id']])) {
-										//rewrite subelement to change main class
-										$subElements = $subResult[$element[$Model->alias]['_id']];
-										foreach($subElements as &$subElement) {
-											$subElement[$assocData['className']] = $subElement[$assoc];
-											unset($subElement[$assoc]);
-										}
-										
-										$element[$assoc] = $subElements;
-									} else {
-										$element[$assoc] = array();
-									}
-								}
+								//$ids = Set::classicExtract($_return, '{n}.'.$Model->alias.'._id');
+								$ids = $this->_getNonEmptyIds($_return, $Model->alias, $Model->primaryKey);
+								$_return = $this->_getManySubElements($_return, $ids, $Model, $linkModel, $assoc, $assocData);
 								break;
+
 							case 'belongsTo':
-								$ids = Set::classicExtract($_return, '{n}.'.$Model->alias.'.'.$assocData['foreignKey']);
-								$subResult = $linkModel->find('all', array('conditions' => array($assocData['foreignKey'] => array('$in' => $ids))));
-								$subResult = Set::combine($subResult, '{n}.'.$linkModel->alias.'._id', '{n}');
-								foreach ($_return as &$element) {
-									if(
-										!empty($element[$Model->alias][$assocData['foreignKey']]) AND
-										!empty($subResult[$element[$Model->alias][$assocData['foreignKey']]])
-									) {
-										$element[$assoc] = $subResult[$element[$Model->alias][$assocData['foreignKey']]][$assoc];
-									} else {
-										$element[$assoc] = array();
-									}
-								}
+								$ids = $this->_getNonEmptyIds($_return, $Model->alias, $assocData['foreignKey']);
+								$_return  =$this->_getBelongsToSubElement($_return, $ids, $Model, $linkModel, $assoc, $assocData);
 								break;
+
 							case 'hasOne':
-								$ids = Set::classicExtract($_return, '{n}.'.$Model->alias.'._id');
-								$subResult = $linkModel->find('all', array('conditions' => array($assocData['foreignKey'] => array('$in' => $ids))));
-								$subResult = Set::combine($subResult, '{n}.'.$linkModel->alias.'.'.$assocData['foreignKey'], '{n}');
-								debug($subResult);
-								foreach ($_return as &$element) {
-									if(
-										!empty($subResult[$element[$Model->alias]['_id']])
-									) {
-										$element[$assoc] = $subResult[$element[$Model->alias]['_id']][$assoc];
-									} else {
-										$element[$assoc] = array();
-									}
-								}
-								
+								$ids = $this->_getNonEmptyIds($_return, $Model->alias, $Model->primaryKey);
+								$_return = $this->_getOneSubElement($_return, $ids, $Model, $linkModel, $assoc, $assocData);
+								break;
+
+							case 'hasList':
+								$ids = $this->_getLists($_return, $Model->alias, $assocData['listName']);
+								$_return = $this->_getListSubElements($_return, $ids, $Model, $linkModel, $assoc, $assocData);
 								break;
 								
 						}
@@ -1011,6 +975,145 @@ class MongodbSource extends DboSource {
 			return $_return;
 		}
 		return $return;
+	}
+
+	protected function _getNonEmptyIds(array $data, $subModel, $key) {
+		$ids = array();
+		foreach($data as $subData) {
+			if(!empty($subData[$subModel][$key])) {
+				$ids[] = $subData[$subModel][$key];// no double ids
+			}
+		}
+		return $ids;
+	}
+
+	protected function _getLists(array $data, $subModel, $key) {
+		$ids = array();
+		foreach($data as $subData) {
+			if(!empty($subData[$subModel][$key]) AND is_array($subData[$subModel][$key])) {
+				$ids = array_merge($ids, $subData[$subModel][$key]);
+			}
+		}
+		return $ids;
+	}
+	
+	/**
+	 * Complete elements with many subelements 
+	 * 
+	 * @param array $data
+	 * @param array $ids
+	 * @param Model $Model
+	 * @param Model $SubModel
+	 * @param string $associationName
+	 * @param array $associationData
+	 */
+	protected function _getManySubElements(array $data, array $ids, Model $Model, Model $SubModel, $associationName, array $associationData) {
+		$subResult = array();
+		if(!empty($ids)) {
+			$subResult = $SubModel->find('all', array('conditions' => array($associationData['foreignKey'] => array('$in' => $ids))));
+			$subResult = Set::combine($subResult, '{n}.'.$SubModel->alias.'._id', '{n}', '{n}.'.$SubModel->alias.'.'.$associationData['foreignKey']);
+		}
+		foreach ($data as &$element) {
+			$element[$associationName] = array();
+			if(!empty($subResult[$element[$Model->alias]['_id']])) {
+				//rewrite subelement to change main class
+				$subElements = $subResult[$element[$Model->alias]['_id']];
+				foreach($subElements as &$subElement) {
+					$subElement[$associationData['className']] = $subElement[$associationName];
+					unset($subElement[$associationName]);
+				}
+				$element[$associationName] = $subElements;
+			}
+		}
+		return $data;
+	}
+	
+	/**
+	 * Complete elements with as hasOne subelement
+	 * 
+	 * @param array $data
+	 * @param array $ids
+	 * @param Model $Model
+	 * @param Model $SubModel
+	 * @param string $associationName
+	 * @param array $associationData
+	 */
+	protected function _getOneSubElement(array $data, array $ids, Model $Model, Model $SubModel, $associationName, array $associationData) {
+		$subResult = array();
+		if(!empty($ids)) {
+			$subResult = $SubModel->find('all', array('conditions' => array($associationData['foreignKey'] => array('$in' => $ids))));
+			$subResult = Set::combine($subResult, '{n}.'.$SubModel->alias.'.'.$associationData['foreignKey'], '{n}');
+		}
+		
+		foreach ($data as &$element) {
+			$element[$associationName] = array();// empty array (no ['assoc']['Model'] = array()) so testing empty(element['assoc']) return TRUE if no subelement
+			if(
+				!empty($subResult[$element[$Model->alias]['_id']])
+			) {
+				$element[$associationName][$associationData['className']] = $subResult[$element[$Model->alias]['_id']][$associationName];
+			}
+		}
+		return $data;
+	}
+	
+	/**
+	 * Complete elements with one belongsTo subelement
+	 * 
+	 * @param array $data
+	 * @param array $ids
+	 * @param Model $Model
+	 * @param Model $SubModel
+	 * @param string $associationName
+	 * @param array $associationData
+	 */
+	protected function _getBelongsToSubElement(array $data, array $ids, Model $Model, Model $SubModel, $associationName, array $associationData) {
+		$subResult = array();
+		if(!empty($ids)) {
+			$subResult = $SubModel->find('all', array('conditions' => array($associationData['foreignKey'] => array('$in' => $ids))));
+			$subResult = Set::combine($subResult, '{n}.'.$SubModel->alias.'._id', '{n}');
+		}
+		foreach ($data as &$element) {
+			$element[$associationName] = array();// empty array (no ['assoc']['Model'] = array()) so testing empty(element['assoc']) return TRUE if no subelement
+			if(
+				!empty($element[$Model->alias][$associationData['foreignKey']]) AND
+				!empty($subResult[$element[$Model->alias][$associationData['foreignKey']]])
+			) {
+				$element[$associationName][$associationData['className']] = $subResult[$element[$Model->alias][$associationData['foreignKey']]][$associationName];
+			}
+		}
+		return $data;
+	}
+	
+	/**
+	 * Complete elements with a list of subelements
+	 * 
+	 * @param array $data
+	 * @param array $ids
+	 * @param Model $Model
+	 * @param Model $SubModel
+	 * @param string $associationName
+	 * @param array $associationData
+	 */
+	protected function _getListSubElements(array $data, array $ids, Model $Model, Model $SubModel, $associationName, array $associationData) {
+		$subResult = array();
+		if(!empty($ids)) {
+			$subResult = $SubModel->find('all', array('conditions' => array( $SubModel->primaryKey => array('$in' => $ids))));
+			$subResult = Set::combine($subResult, '{n}.'.$SubModel->alias.'._id', '{n}');
+		}
+		foreach ($data as &$element) {
+			$element[$associationName] = array();// init assoc sub data
+			if(!empty($element[$Model->alias][$associationData['listName']])) {
+				foreach($element[$Model->alias][$associationData['listName']] as $subId) {
+					if(!empty($subResult[$subId])) {
+						$subElement = $subResult[$subId];
+						$subElement[$associationData['className']] = $subElement[$SubModel->alias];
+						unset($subElement[$SubModel->alias]);
+						$element[$associationName][] = $subElement;
+					}
+				}
+			}
+		}
+		return $data;
 	}
 
 /**
@@ -1199,6 +1302,18 @@ class MongodbSource extends DboSource {
 		$query = preg_replace('@"ObjectId\((.*?)\)"@', 'ObjectId ("\1")', $query);
 		return parent::logQuery($query);
 	}
+	
+	/**
+	 * Get last db error
+	 */
+	public function lastError() {
+		$error = $this->_db->lastError();
+		if(!empty($error['err'])) {
+			return $error;
+		}
+		return NULL;
+	}
+	
 
 /**
  * convertId method
