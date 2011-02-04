@@ -19,6 +19,8 @@ abstract class MongodbModel extends AppModel{
 	
 	public $__associations = array('belongsTo', 'hasOne', 'hasMany', 'hasAndBelongsToMany', 'hasList');
 
+	public $hasList = array();
+
 	public $primaryKey = '_id';
 
 	public $actsAs = array(

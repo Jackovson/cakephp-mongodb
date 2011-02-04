@@ -974,7 +974,7 @@ class MongodbSource extends DboSource {
 							case 'hasList':
 								//$ids = Set::classicExtract($_return, '{n}.'.$Model->alias.'._id');
 								$ids = $this->_getLists($_return, $Model->alias, $assocData['listName']);
-								$_return = $this->_getManySubElements($_return, $ids, $Model, $linkModel, $assoc, $assocData);
+								//$_return = $this->_getManySubElements($_return, $ids, $Model, $linkModel, $assoc, $assocData);
 								break;
 								
 						}
