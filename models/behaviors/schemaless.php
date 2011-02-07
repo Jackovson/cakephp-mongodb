@@ -58,16 +58,16 @@ class SchemalessBehavior extends ModelBehavior {
 	protected $_defaultSettings = array(
 	);
 
-/**
- * setup method
- *
- * Don't currently have any settings at all - disabled
- *
- * @param mixed $Model
- * @param array $config array()
- * @return void
- * @access public
- */
+	/**
+	 * setup method
+	 *
+	 * Don't currently have any settings at all - disabled
+	 *
+	 * @param mixed $Model
+	 * @param array $config array()
+	 * @return void
+	 * @access public
+	 */
 	public function setup(&$Model, $config = array()) {
 		//$this->settings[$Model->alias] = array_merge($this->_defaultSettings, $config);
 	}

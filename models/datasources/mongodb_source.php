@@ -192,8 +192,9 @@ class MongodbSource extends DboSource {
 				if (!empty($this->config['login'])) {
 					$return = $this->_db->authenticate($this->config['login'], $this->config['password']);
 					if (!$return || !$return['ok']) {
-						trigger_error('MongodbSource::connect ' . $return['errmsg']);
-						return false;
+						throw new MongoException();
+						//trigger_error('MongodbSource::connect ' . $return['errmsg']);
+						//return false;
 					}
 				}
 				$this->connected = true;
@@ -947,7 +948,27 @@ class MongodbSource extends DboSource {
 							case 'hasList':
 								$ids = $this->_getLists($_return, $Model->alias, $assocData['listName']);
 								$_return = $this->_getListSubElements($_return, $ids, $Model, $linkModel, $assoc, $assocData);
+								/*
+								$ids = Set::classicExtract($_return, '{n}.'.$Model->alias.'.'.$assocData['foreignKey']);
+								//$ids = $this->_getNonEmptyIds($_return, $Model->alias, $assocData['foreignKey']);
+								$subResult = array();
+								if(!empty($ids)) {
+									$subResult = $linkModel->find('all', array('conditions' => array($assocData['foreignKey'] => array('$in' => $ids))));
+									$subResult = Set::combine($subResult, '{n}.'.$linkModel->alias.'._id', '{n}');
+								}
+								foreach ($_return as &$element) {
+									if(
+										!empty($element[$Model->alias][$assocData['foreignKey']]) AND
+										!empty($subResult[$element[$Model->alias][$assocData['foreignKey']]])
+									) {
+										$element[$assoc] = $subResult[$element[$Model->alias][$assocData['foreignKey']]][$assoc];
+									} else {
+										$element[$assoc] = array();
+									}
+								}
+								//*/
 								break;
+								
 								
 						}
 						

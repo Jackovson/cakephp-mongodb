@@ -68,29 +68,29 @@ class SqlCompatibleBehavior extends ModelBehavior {
 		)
 	);
 
-/**
- * setup method
- *
- * Allow overriding the operator map
- *
- * @param mixed $Model
- * @param array $config array()
- * @return void
- * @access public
- */
+	/**
+	 * setup method
+	 *
+	 * Allow overriding the operator map
+	 *
+	 * @param mixed $Model
+	 * @param array $config array()
+	 * @return void
+	 * @access public
+	 */
 	public function setup(&$Model, $config = array()) {
 		$this->settings[$Model->alias] = array_merge($this->_defaultSettings, $config);
 	}
 
-/**
- * If requested, convert dates from MongoDate objects to standard date strings
- *
- * @param mixed $Model
- * @param mixed $results
- * @param mixed $primary
- * @return void
- * @access public
- */
+	/**
+	 * If requested, convert dates from MongoDate objects to standard date strings
+	 *
+	 * @param mixed $Model
+	 * @param mixed $results
+	 * @param mixed $primary
+	 * @return void
+	 * @access public
+	 */
 	public function afterFind(&$Model, $results, $primary) {
 		if ($this->settings[$Model->alias]['convertDates']) {
 			$this->convertDates($results);
@@ -98,16 +98,16 @@ class SqlCompatibleBehavior extends ModelBehavior {
 		return $results;
 	}
 
-/**
- * beforeFind method
- *
- * If conditions are an array ensure they are mongified
- *
- * @param mixed $Model
- * @param mixed $query
- * @return void
- * @access public
- */
+	/**
+	 * beforeFind method
+	 *
+	 * If conditions are an array ensure they are mongified
+	 *
+	 * @param mixed $Model
+	 * @param mixed $query
+	 * @return void
+	 * @access public
+	 */
 	public function beforeFind(&$Model, $query) {
 		if (is_array($query['conditions']) && $this->_translateConditions($Model, $query['conditions'])) {
 			return $query;
@@ -115,13 +115,13 @@ class SqlCompatibleBehavior extends ModelBehavior {
 		return true;
 	}
 
-/**
- * Convert MongoDate objects to strings for the purpose of view simplicity
- *
- * @param mixed $results
- * @return void
- * @access public
- */
+	/**
+	 * Convert MongoDate objects to strings for the purpose of view simplicity
+	 *
+	 * @param mixed $results
+	 * @return void
+	 * @access public
+	 */
 	public function convertDates(&$results) {
 		if (is_array($results)) {
 			foreach($results as &$row) {
@@ -132,16 +132,16 @@ class SqlCompatibleBehavior extends ModelBehavior {
 		}
 	}
 
-/**
- * translateConditions method
- *
- * Loop on conditions and desqlify them
- *
- * @param mixed $Model
- * @param mixed $conditions
- * @return void
- * @access protected
- */
+	/**
+	 * translateConditions method
+	 *
+	 * Loop on conditions and desqlify them
+	 *
+	 * @param mixed $Model
+	 * @param mixed $conditions
+	 * @return void
+	 * @access protected
+	 */
 	protected function _translateConditions(&$Model, &$conditions) {
 		$return = false;
 		foreach($conditions as $key => &$value) {
@@ -234,16 +234,16 @@ class SqlCompatibleBehavior extends ModelBehavior {
 		return $return;
 	}
 
-/**
- * translateOperator method
- *
- * Use the operator map for the model and return what the db really wants to hear
- *
- * @param mixed $Model
- * @param mixed $operator
- * @return string
- * @access protected
- */
+	/**
+	 * translateOperator method
+	 *
+	 * Use the operator map for the model and return what the db really wants to hear
+	 *
+	 * @param mixed $Model
+	 * @param mixed $operator
+	 * @return string
+	 * @access protected
+	 */
 	protected function _translateOperator($Model, $operator) {
 		if (!empty($this->settings[$Model->alias]['operators'][$operator])) {
 			return $this->settings[$Model->alias]['operators'][$operator];
